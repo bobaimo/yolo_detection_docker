@@ -1,0 +1,34 @@
+models:
+  violence: "../models/violence.pt"
+  license_plate: "../models/license_plate.pt"
+  license_plate_11x: "../models/license_plate_11x.pt"
+  fire-and-smoke: "../models/fire-and_smoke.pt"
+  rubbish: "../models/garbage.pt"
+
+confidence:
+  violence: 0.8
+  license_plate: 0.6
+  license_plate_11x: 0.6
+  fire-and-smoke: 0.7
+  rubbish: 0.75
+
+robot:
+  rtsp://localhost:8554/stream: "local test"
+
+camera:
+  rtsp://localhost:8554/stream: "camera test"
+
+# API endpoint settings
+api:
+  post_endpoint: "http://localhost:8080/api/detections"
+  timeout: 10
+
+# Model directory settings
+model_base_dir: "models"
+model_extension: ".pt"
+
+# Output settings
+output_dir: "/app/output"
+crops_dir: "crops"
+frames_dir: "frames"
+
