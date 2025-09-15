@@ -27,8 +27,8 @@ def post_json_data(json_data, post_url, timeout=10):
         return False
 
 
-def detection(detector, frame, json_tmp, conf_threshold):
-    results = detector.predict(frame, conf=conf_threshold, verbose=False)
+def detection(detector, frame, json_tmp, conf_threshold,class_list):
+    results = detector.predict(frame, conf=conf_threshold, verbose=False, classes=class_list)
     detections,image_list = [], []
     
     for result in results:
@@ -40,26 +40,19 @@ def detection(detector, frame, json_tmp, conf_threshold):
                 class_id = int(box.cls[0])
                 # Get class name from model
                 class_name = detector.names.get(class_id, 'unknown')
-                
-                # Create detection object
-                detection_obj = json_tmp.copy()
-                detection_obj.update({"detect object": class_name,
-                                    "bounding_box": {
-                                        "x1": x1,
-                                        "y1": y1, 
-                                        "x2": x2,
-                                        "y2": y2,
-                                        "width": x2 - x1,
-                                        "height": y2 - y1
-                                        },
-                                    })
+                detections.append({"x1": x1,
+                                   "y1": y1, 
+                                   "x2": x2,
+                                   "y2": y2,
+                                   "width": x2 - x1,
+                                   "height": y2 - y1
+                                   })
                 bounded_img=frame.copy()         
                 cv2.rectangle(bounded_img, (x1, y1), (x2, y2), (0, 255, 0), 2)       
-                image_list.append(bounded_img)       
-                detections.append(detection_obj)
-                    
-    
-    return detections,image_list
+                image_list.append(bounded_img)    
+    json_tmp.update({"bounding_box": detections
+                     },)
+    return json_tmp,image_list
 
 
 def load_model_config(config_path="../config.yaml"):
@@ -133,7 +126,7 @@ def rtsp_stream_init(rtsp_url):
 
 def blur_face(image,frame_count):
     face_detector = YOLO("../models/face_bounding.pt")
-    results = face_detector.predict(image, conf=0.75, verbose=False)
+    results = face_detector.predict(image, conf=0.7, verbose=False)
     for result in results:
         if hasattr(result, 'boxes') and result.boxes is not None:
             boxes = result.boxes
@@ -179,34 +172,45 @@ def main(args):
             success, frame = video_cap.read()
             if success:
                 frame_count += 1
-                if frame_count % 10 != 0:
+                if frame_count % 10 == 0:
                     detection_tmp = {
+                        "model type": args.type,
                         "time": datetime.now().isoformat(),
                         "robot": get_config("robot", args.stream, config),
                         "camera": get_config("camera", args.stream, config),
                     }
+                    if args.type in ["bicylce",
+                                      "pets",
+                                      "vehicle",
+                                      "person"]:
+                        class_list = get_config("classes", args.type, config)
+                    else: 
+                        class_list=[0]
+
+
                     # Get detections as JSON array
-                    frame_detections, bounded_images = detection(detector, frame, detection_tmp, get_config("confidence", args.type, config))
+                    frame_detection, bounded_images = detection(detector, frame, detection_tmp, get_config("confidence", args.type, config),class_list)
 
-                    for detection_json in frame_detections:
-                        # Save individual frame detection JSON
-                        json_filename = f"detection_frame_{frame_count}.json"
-                        json_filepath = json_dir / json_filename
-                        with open(json_filepath, 'w') as f:
-                            json.dump(detection_json, f, indent=2)
-                        
-                        # POST the JSON data
-                        post_json_data(detection_json, post_endpoint, api_timeout)
+                    img_path_list=[] 
+                    for i,img in enumerate(bounded_images):
+                        img_filename = f"detection_{args.type}_{frame_count}_obj_{i}.jpg"
+                        img_filepath = images_dir / img_filename
+                        if args.blur:
+                            img = blur_face(img,frame_count)
+                        cv2.imwrite(str(img_filepath), img)
+                        img_path_list.append(str(img_filepath))
 
-                        # Save bounded images
-                        for i, img in enumerate(bounded_images):
-                            img_filename = f"detection_frame_{frame_count}_obj_{i}.jpg"
-                            img_filepath = images_dir / img_filename
-                            if args.blur:
-                                img = blur_face(img,frame_count)
-                            cv2.imwrite(str(img_filepath), img)
 
-                        print(f"Frame {frame_count}: {len(frame_detections)} detections saved")
+                    # Save individual frame detection JSON
+                    json_filename = f"detection_frame_{frame_count}.json"
+                    json_filepath = json_dir / json_filename
+                    frame_detection.update({"image path": img_path_list})
+                    with open(json_filepath, 'w') as f:
+                        json.dump(frame_detection, f, indent=2)
+                    
+                    # POST the JSON data
+                    post_json_data(frame_detection, post_endpoint, api_timeout)
+                    print(f"Frame {frame_count}: {len(bounded_images)} detections saved")
 
                     # # Display frame with bounding boxes
                     # if bounded_images:
