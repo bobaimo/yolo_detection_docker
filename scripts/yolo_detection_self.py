@@ -55,7 +55,7 @@ def detection(detector, frame, json_tmp, conf_threshold,class_list):
     return json_tmp,image_list
 
 
-def load_model_config(config_path="../config.yaml"):
+def load_model_config(config_path="./config.yaml"):
     """Load model configuration from YAML file."""
     try:
         with open(config_path, 'r') as f:
@@ -92,9 +92,9 @@ def get_time():
 
     return day,month,year,hour,minute,second
 
-def create_output_directories(base_path="../output"):
-    """Create hierarchical directory structure: output/year/month/day/hour/"""
+def create_output_directories():
     day, month, year, hour, minute, second = get_time()
+    base_path="./output"
     
     # Create directory path
     dir_path = Path(base_path) / year / month / day / hour
@@ -125,7 +125,7 @@ def rtsp_stream_init(rtsp_url):
     return video_cap
 
 def blur_face(image,frame_count):
-    face_detector = YOLO("../models/face_bounding.pt")
+    face_detector = YOLO("./models/face_bounding.pt")
     results = face_detector.predict(image, conf=0.7, verbose=False)
     for result in results:
         if hasattr(result, 'boxes') and result.boxes is not None:
@@ -147,7 +147,7 @@ def main(args):
     
     # Get API configuration
     api_config = config.get("api", {})
-    post_endpoint = api_config.get("post_endpoint", "http://localhost:8080/api/detections")
+    post_endpoint = api_config.get("post_endpoint", "http://post-server:8080/api/detections")
     api_timeout = api_config.get("timeout", 10)
     
     # Create output directories
@@ -174,10 +174,16 @@ def main(args):
                 frame_count += 1
                 if frame_count % 10 == 0:
                     detection_tmp = {
-                        "model type": args.type,
-                        "time": datetime.now().isoformat(),
+                        "model_type": args.type,
+                        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         "robot": get_config("robot", args.stream, config),
                         "camera": get_config("camera", args.stream, config),
+                        "pose":  {"x" : 0,
+                                  "y" : 0,
+                                  "z" : 0,
+                                  "r" : 0,
+                                  "p" : 0,  
+                                  "y" : 0,}
                     }
                     if args.type in ["bicylce",
                                       "pets",
@@ -240,8 +246,8 @@ def main(args):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Docker YOLO Detection Script')
-    parser.add_argument('--type', help='Model type/name (e.g., violence, license_plate, fire-and-smoke)', default="license_plate", required=False)
-    parser.add_argument('--stream', help='RTSP stream URL', default="rtsp://localhost:8554/stream",required=False)
-    parser.add_argument('--blur', action='store_true', help='Enable blur on detected objects',required=False)
+    parser.add_argument('--type', help='Model type/name (e.g., violence, license_plate, fire-and-smoke)', default="person", required=False)
+    parser.add_argument('--stream', help='RTSP stream URL', default="rtsp://18.167.218.143:10554/34020000001320118007_34020000001320118007",required=False)
+    parser.add_argument('--blur', action='store_true', help='Enable blur on detected objects', default=True,required=False)
     args=parser.parse_args()
     main(args)
