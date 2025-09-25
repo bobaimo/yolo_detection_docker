@@ -27,7 +27,7 @@ def post_json_data(json_data, post_url, timeout=10):
 
 
 def detection(detector, frame, json_tmp, conf_threshold,class_list):
-    results = detector.predict(frame, conf=conf_threshold, verbose=False, classes=class_list)
+    results = detector.predict(frame, conf=conf_threshold, verbose=True, classes=class_list)
     detections,bbox_list = [], []
     frame_height, frame_width = frame.shape[:2]
     for result in results:
@@ -115,7 +115,7 @@ def rtsp_stream_init(rtsp_url):
 
 def blur_face(image,frame_count):
     face_detector = YOLO("./models/face_bounding.pt")
-    results = face_detector.predict(image, conf=0.7, verbose=False)
+    results = face_detector.predict(image, conf=0.5, verbose=True)
     for result in results:
         if hasattr(result, 'boxes') and result.boxes is not None:
             boxes = result.boxes
@@ -168,7 +168,8 @@ def main():
     
     frame_count = 0
     previous_detection = time.time()
-    detection_period = 5
+    detection_period = 3
+    PEOPLE_CAP = 2
 
     try:
         while True:
@@ -182,7 +183,7 @@ def main():
                                       "robot": robot,
                                       "camera": camera,
                                       "pose":  get_robot_pose()}
-                    if model_type in ["bicylce",
+                    if model_type in ["bicycle",
                                       "pets",
                                       "vehicle",
                                       "person"]:
@@ -191,11 +192,13 @@ def main():
                         class_list=[0]
 
                     # Get detections as JSON array
+                    print(f"Start detection of {model_type}: ")
                     frame_detection, bbox_list = detection(detector, frame, detection_tmp, get_config("confidence", model_type, config), class_list)
 
 
                     img_path_list=[]
                     if blur_enabled and len(bbox_list)!=0:
+                        print(f"Start detection of faces: ")
                         blurred_img = blur_face(frame,frame_count)
                     for i, bbox in enumerate(bbox_list):
                         img_filename = f"{robot}_{camera}_detection_{model_type}_{frame_count}_obj_{i}.jpg"
@@ -205,15 +208,28 @@ def main():
                         cv2.rectangle(bounded_image, (x1, y1), (x2, y2), (0, 255, 0), 2)       
                         cv2.imwrite(str(img_filepath), bounded_image)
                         img_path_list.append(str(output_dir / img_filename))
+
+                    if len(bbox_list)>PEOPLE_CAP:
+                        full_bounded_image=blurred_img.copy()
+                        img_filename = f"{robot}_{camera}_detection_{model_type}_{frame_count}_full_bound.jpg"
+                        img_filepath = images_dir / img_filename
+                        for bbox in bbox_list:
+                            [x1, x2, y1, y2] = bbox
+                            cv2.rectangle(full_bounded_image, (x1, y1), (x2, y2), (0, 255, 0), 2)     
+                        cv2.putText(full_bounded_image, f"PEOPLE COUNT: {len(bbox_list)}", (full_bounded_image.shape[1]-300, 30), 
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+                        cv2.imwrite(str(img_filepath), full_bounded_image)
+                        print("Exceed people count limit!!")
+                        img_path_list.append(str(output_dir / img_filename))
                     
                     # POST the JSON data
                     if len(bbox_list)!=0:
                         frame_detection.update({"image_path": img_path_list})
                         print(f"JSON data: {frame_detection}")
                         post_json_data(frame_detection, post_endpoint, api_timeout)
-                        detection_period=10
+                        detection_period=7
                     else:
-                        detection_period=5
+                        detection_period=3
 
                     print(f"Frame {frame_count}: {len(bbox_list)} detections saved")
                     previous_detection=time.time()

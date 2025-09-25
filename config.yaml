@@ -2,7 +2,7 @@ models:
   violence: "./models/violence.pt"
   license_plate: "./models/license_plate.pt"
   rubbish: "./models/garbage.pt"
-  bicylce: "./models/yolo11n.pt"
+  bicycle: "./models/yolo11n.pt"
   pets: "./models/yolo11n.pt"
   vehicle: "./models/yolo11n.pt"
   person: "./models/yolo11n.pt"
@@ -10,11 +10,11 @@ models:
 confidence:
   violence: 0.85
   license_plate: 0.6
-  rubbish: 0.7
-  bicylce: 0.6
-  pets: 0.6
-  vehicle: 0.6
-  person: 0.6
+  rubbish: 0.5
+  bicycle: 0.5
+  pets: 0.5
+  vehicle: 0.5
+  person: 0.5
 
 classes:
   bicycle: [1]
@@ -26,8 +26,11 @@ robot:
   rtsp://localhost:8554/stream: "local_test"
   rtsp://18.167.218.143:10554/34020000001320118007_34020000001320118007: "as00118"
   rtsp://18.167.218.143:10554/34020000001110000108_34020000001320108002: "as00108"
+  rtsp://18.167.218.143:10554/34020000001110000108_34020000001320108001: "as00108"
   rtsp://192.144.182.93:10554/34020000001110000211_34020000001310211003: "as00211"
   rtsp://192.144.182.93:10554/34020000001110000211_34020000001310211004: "as00211"
+  rtsp://192.144.182.93:10554/34020000001110000211_34020000001310211001: "as00211"
+
 
 
 
@@ -36,14 +39,19 @@ camera:
   rtsp://localhost:8554/stream: "camera_test"
   rtsp://18.167.218.143:10554/34020000001320118007_34020000001320118007: "alert_camera"
   rtsp://18.167.218.143:10554/34020000001110000108_34020000001320108002: "rear_camera"
+  rtsp://18.167.218.143:10554/34020000001110000108_34020000001320108001: "front_camera"
   rtsp://192.144.182.93:10554/34020000001110000211_34020000001310211003: "left_camera"
   rtsp://192.144.182.93:10554/34020000001110000211_34020000001310211004: "right_camera"
+  rtsp://192.144.182.93:10554/34020000001110000211_34020000001310211001: "front_camera"
+  
+
 
 
 
 # API endpoint settings
 api:
-  post_endpoint: "http://152.136.145.174:18000/aiAlarm/save"
+  # post_endpoint: "http://152.136.145.174:18000/aiAlarm/save"
+  post_endpoint: "http://18.167.218.143:18000/aiAlarm/save"
   # post_endpoint: "http://post-server:8080/api/detections"
   timeout: 10
 
