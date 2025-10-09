@@ -44,8 +44,9 @@ camera:
   
 # API endpoint settings
 api:
-  # post_endpoint: "http://152.136.145.174:18000/aiAlarm/save"
-  post_endpoint: "http://localhost:8000/api/detections"
+  # post_endpoint: "http://18.167.218.143:18000/aiAlarm/save"
+  post_endpoint: "http://152.136.145.174:18000/aiAlarm/save"
+  # post_endpoint: "http://localhost:8000/api/detections"
   timeout: 10
 
 

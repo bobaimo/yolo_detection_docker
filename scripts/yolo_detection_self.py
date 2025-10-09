@@ -15,7 +15,7 @@ import yaml
 import requests
 import time
 import socket
-from tcp_listener import TCP_Listener
+from detection_reader import DetectionReader
 
 
 def post_json_data(json_data, post_url, timeout=10):
@@ -118,22 +118,6 @@ def rtsp_stream_init(rtsp_url):
     
     return video_cap
 
-def blur_face(image,frame_count):
-    face_detector = YOLO("./models/face_bounding_rknn_model")
-    results = face_detector.predict(image, conf=0.6, verbose=True)
-    for result in results:
-        if hasattr(result, 'boxes') and result.boxes is not None:
-            boxes = result.boxes
-            for box in boxes:
-                # Get box coordinates
-                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                # Apply Gaussian blur to the detected face region
-                face_region = image[y1:y2, x1:x2]
-                blurred_face = cv2.GaussianBlur(face_region, (99, 99), 30)
-                image[y1:y2, x1:x2] = blurred_face
-                print(f"Blurred face at frame {frame_count}")
-    return image
-
 def get_robot_pose():
     pose = {"x" : 0,
             "y" : 0,
@@ -159,7 +143,6 @@ def main(args,listener):
     # Get configuration from environment variables
     model_type = args.type
     stream_url = args.stream
-    blur_enabled = args.blur
 
     video_cap = rtsp_stream_init(stream_url)
     print(f"Starting RTSP stream processing: {stream_url}")
@@ -173,15 +156,25 @@ def main(args,listener):
     detection_period = 3
     PEOPLE_CAP = 2
     valid_path=["a","b"]
+    posted_warning = False
 
     try:
         while True:
-            path_name=listener.PathName
+            path_name=listener.pathname
             success, frame = video_cap.read()
             if success:
                 frame_count += 1
-                if (time.time() - previous_detection) > detection_period and path_name in valid_path:
-                    images_dir, output_dir = create_output_directories(hong_kong_tz)
+                if (time.time() - previous_detection) > detection_period:
+                    if path_name not in valid_path:
+                        if not posted_warning:
+                            print(f"Current path {path_name} not in detection area, skipping ....")
+                            posted_warning = True
+                        previous_detection = time.time()
+                        continue
+                    elif posted_warning:
+                        print(f"Current path {path_name} in detection area, resuming ....")
+                        posted_warning = False
+
                     detection_tmp = { "model_type": model_type,
                                       "time": datetime.now(hong_kong_tz).strftime("%Y-%m-%d %H:%M:%S"),
                                       "robot": get_config("robot", stream_url, config),
@@ -198,36 +191,8 @@ def main(args,listener):
                     # Get detections as JSON array
                     frame_detection, bbox_list = detection(detector, frame, detection_tmp, get_config("confidence", model_type, config), class_list)
 
-
-                    img_path_list=[]
-                    if blur_enabled:
-                        blurred_img = blur_face(frame,frame_count)
-                    for i, bbox in enumerate(bbox_list):
-                        img_filename = f"detection_{model_type}_{frame_count}_obj_{i}.jpg"
-                        img_filepath = images_dir / img_filename
-                        [x1, x2, y1, y2] = bbox
-                        bounded_image=blurred_img.copy()
-                        cv2.rectangle(bounded_image, (x1, y1), (x2, y2), (0, 255, 0), 2)       
-                        cv2.imwrite(str(img_filepath), bounded_image)
-                        img_path_list.append(str(output_dir / img_filename))
-                    
-                    if len(bbox_list)>PEOPLE_CAP:
-                        full_bounded_image=blurred_img.copy()
-                        img_filename = f"{robot}_{camera}_detection_{model_type}_{frame_count}_full_bound.jpg"
-                        img_filepath = images_dir / img_filename
-                        for bbox in bbox_list:
-                            [x1, x2, y1, y2] = bbox
-                            cv2.rectangle(full_bounded_image, (x1, y1), (x2, y2), (0, 255, 0), 2)     
-                        cv2.putText(full_bounded_image, f"PEOPLE COUNT: {len(bbox_list)}", (full_bounded_image.shape[1]-300, 30), 
-                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-                        cv2.imwrite(str(img_filepath), full_bounded_image)
-                        frame_detection.update({"people_count": len(bbox_list)})
-                        print("Exceed people count limit!!")
-                        img_path_list.append(str(output_dir / img_filename))
-                    
                     # POST the JSON data
                     if len(bbox_list)!=0:
-                        frame_detection.update({"image_path": img_path_list})
                         frame_detection.update({"people_count": len(bbox_list)})
                         print(f"JSON data: {frame_detection}")
                         post_json_data(frame_detection, post_endpoint, api_timeout)
@@ -235,10 +200,8 @@ def main(args,listener):
                     else:
                         detection_period=7
 
-                    print(f"Frame {frame_count}: {len(bbox_list)} detections saved")
+                    print(f"Frame {frame_count}: {len(bbox_list)} people on current detection")
                     previous_detection=time.time()
-                elif path_name not in valid_path:
-                    print(f"Current path {path_name} not in detection area, skipping ....")
 
             else:
                 print("Failed to read frame from RTSP stream")
@@ -261,8 +224,6 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Docker YOLO Detection Script')
     parser.add_argument('--type', help='Model type/name (e.g., violence, license_plate, fire-and-smoke)', default="person", required=False)
     parser.add_argument('--stream', help='RTSP stream URL', default="rtsp://18.167.218.143:10554/34020000001110000108_34020000001320108001",required=False)
-    parser.add_argument('--blur', action='store_true', help='Enable blur on detected objects',default= True, required=False)
     args=parser.parse_args()
-    listener=TCP_Listener()
-    listener.start()
+    listener=DetectionReader("http://43.199.222.97:8081",5.0)
     main(args,listener)
